@@ -24,6 +24,8 @@ zo <- xts(merged$ANZ_AUFTRAEGE, order.by=merged$EINSPIELDATUM)
 zo <- xts(raw$ANZ_AUFTRAEGE, order.by=raw$EINSPIELDATUM)
 #works better than with weekend
 
+#TODO: Try to Change the TimeSeries to get better Results
+
 #Evaluation of Algorithms
 library(forecast)
 ts.arima <- forecast(auto.arima(zo[,1]),5)
@@ -39,33 +41,42 @@ startdate <- max(raw$EINSPIELDATUM)
 timeline = seq(as.Date(startdate+1), as.Date(startdate+7), "days")
 df <- data.frame(timeline)
 names(df) <- "EINSPIELDATUM"
-df$ANZ_AUFTRAEGE <- 0
+df$arima <- NA
+df$tbats <- NA
 #get weekday
 df$Tag <- weekdays(df$timeline)
 #set weekend = 0
-df[!df$Tag %in% c("Samstag", "Sonntag"),]$ANZ_AUFTRAEGE <- as.integer(ts.arima$mean)
-names(df) <- c("Einspieldatum", "Tag", "Anz_Auftraege")
+df[!df$Tag %in% c("Samstag", "Sonntag"),]$arima <- as.integer(ts.arima$mean)
+df[!df$Tag %in% c("Samstag", "Sonntag"),]$tbats <- as.integer(ts.tbats$mean)
+names(df) <- c("Einspieldatum", "Tag", "arima", "tbats")
 
 #build historical window with weekend
-final <- tail(raw, 10)
+final <- tail(raw, 15)
 startdate <- min(final$EINSPIELDATUM)
 enddate <- max(final$EINSPIELDATUM)
 timeline = seq(as.Date(startdate), as.Date(enddate), "days")
 final.frame <- data.frame(timeline)
 names(final.frame) <- "EINSPIELDATUM"
 final.frame$Tag <- weekdays(final.frame$EINSPIELDATUM)
-final.frame$Anz_Auftraege <- 0
+final.frame$Anz_Auftraege <- NA
 final.frame[!final.frame$Tag %in% c("Samstag", "Sonntag"),]$Anz_Auftraege <- final$ANZ_AUFTRAEGE
-
-#combine those two
 names(final.frame) <- c("Einspieldatum", "Tag", "Anz_Auftraege")
-total <- rbind(final.frame, df)
 
+#make full join on date
+total <- merge(x = final.frame, y = df, by = "Einspieldatum", all=TRUE)
+total$Tag.x <- NULL
+total$Tag.y <- NULL
 
 #make a nice plot
+library(reshape2)
+library(scales)
 library(ggplot2)
-ggplot(data=total, aes(x=Einspieldatum, y=Anz_Auftraege)) +
-      geom_line() +
-      geom_point() +
-      ggtitle("AFD Forecast") +
-      ylab("Anzahl eingespielte Aufträge")
+mdf <- melt(total, id.vars="Einspieldatum", value.name="Anz_Auftraege", variable.name="Quelle")
+ggplot(data=mdf, aes(Einspieldatum, Anz_Auftraege, color=Quelle)) + 
+  geom_line(size=1) +
+  geom_point(size=3, fill="white") + 
+  scale_x_date(labels = date_format("%d.%m.%Y"), breaks = date_breaks("days")) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("AFD Forecast") +
+  theme(plot.title = element_text(lineheight=.8, face="bold"))
+  ylab("Anzahl eingespielte Aufträge")
